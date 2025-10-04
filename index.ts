@@ -10,6 +10,13 @@ type TrackProps = {
     properties: Record<string, any>
 }
 
+type EventProps = {
+    name: string
+    anonymousId?: string
+    externalId?: string
+    properties?: Record<string, any>
+}
+
 type IdentifyProps = {
     anonymousId?: string
     externalId: string
@@ -38,6 +45,10 @@ export class Client {
         return await this.#request('track', { ...props, data })
     }
 
+    async events(props: EventProps[]) {
+        return await this.#request('events', props.map(({ properties: data, ...rest }) => ({ ...rest, data })))
+    }
+
     async identify({ traits: data, ...props }: IdentifyProps) {
         return await this.#request('identify', { ...props, data })
     }
@@ -46,13 +57,18 @@ export class Client {
         return await this.#request('identify', props)
     }
 
-    #mapKeys(obj: Record<string, any>) {
-        const camelToUnderscore = (key: string) => key.replace( /([A-Z])/g, "_$1" ).toLowerCase()
-        
-        const newObj: Record<string, any> = {}
-        for (const key in obj) {
-            newObj[camelToUnderscore(key)] = obj[key]
+    #mapKeys(value: Record<string, any> | Record<string, any>[]): Record<string, any> | Record<string, any>[] {
+        if (Array.isArray(value)) {
+            return value.map((item) => this.#mapKeys(item));
         }
+
+        const camelToUnderscore = (key: string) => key.replace(/([A-Z])/g, "_$1").toLowerCase()
+
+        const newObj: Record<string, any> = {}
+        for (const key in value) {
+            newObj[camelToUnderscore(key)] = value[key]
+        }
+
         return newObj
     }
 
@@ -88,6 +104,16 @@ export class BrowserClient extends Client {
         })
     }
 
+    async events(props: EventProps[]) {
+        return await this.#client.events(props.map((event) => {
+            return {
+                ...event,
+                anonymousId: event.anonymousId ?? this.#anonymousId,
+                externalId: event.externalId ?? this.#externalId,
+            }
+        }))
+    }
+
     async identify(props: IdentifyProps) {
         this.#externalId = props.externalId
         return await this.#client.identify({
@@ -118,6 +144,10 @@ export class Parcelvoy {
 
     static async track(props: TrackProps) {
         return await Parcelvoy.instance?.track(props)
+    }
+
+    static async events(props: EventProps[]) {
+        return await Parcelvoy.instance?.events(props)
     }
 
     static async identify(props: IdentifyProps) {
